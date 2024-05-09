@@ -1,26 +1,22 @@
 from imageio.v2 import imread, imwrite
 import math
 import numpy as np
+import pandas as pd
 
 def calculate_energies(image, rows, cols):
     '''
     '''
-    energies = np.array([[0] * cols] * rows)
-    
+    energies = np.array(([[0] * cols] * rows), dtype = "float64")
+
     for row in range(rows):
         for col in range(cols):
             if row == 0 or row == rows - 1 or col == 0 or col == cols - 1:
                 energies[row, col] = 1000
             else:
-                r1, g1, b1 = image[row, col - 1]
-                r2, g2, b2 = image[row, col + 1]
-                hor_cost = ((r1 - r2) ** 2) + ((g1 - g2) ** 2) + ((b1 - b2) ** 2)
-
-                r1, g1, b1 = image[row - 1, col]
-                r2, g2, b2 = image[row + 1, col]
-                ver_cost = ((r1 - r2) ** 2) + ((g1 - g2) ** 2) + ((b1 - b2) ** 2)
-
-                energies[row, col] = math.sqrt(hor_cost + ver_cost)
+                ver_cost = np.sum(np.power(np.subtract(image[row - 1, col], image[row + 1, col]),2))
+                hor_cost = np.sum(np.power(np.subtract(image[row, col - 1], image[row, col + 1]),2))
+                
+                energies[row, col] = np.sqrt(np.sum(np.power(np.subtract(image[row, col - 1], image[row, col + 1]),2)) + np.sum(np.power(np.subtract(image[row - 1, col], image[row + 1, col]),2)))
     print('CE')
     return energies
 
@@ -30,28 +26,29 @@ def find_min_seam(energies):
     rows = len(energies)
     cols = len(energies[0])
     min_energies = energies.copy()
-    traces = energies.copy()
+    traces = energies.copy().astype("int64")
 
     for row in range(rows):
         for col in range(cols):
             if row == 0:
-                traces[row, col] = -1
+                traces[row, col] = 0
             elif col == 0:
-                index = np.argmin(energies[row - 1, col:col + 2])
+                index = np.argmin(min_energies[row - 1, col:col + 2])
                 min_energies[row, col] += min_energies[row - 1, col + index]
                 traces[row, col] = col + index
-            else:
-                index = np.argmin(energies[row - 1, col - 1:col + 2])
+            else: 
+                index = np.argmin(min_energies[row - 1, col - 1:col + 2])
                 min_energies[row, col] += min_energies[row - 1, col - 1 + index]
-                traces[row] = col - 1 + index
+                traces[row, col] = col - 1 + index
     
     min_seam = [0] * rows
     min_index = np.argmin(min_energies[rows - 1])
 
-    for row in range(rows - 1, -1, -1):
+    for row in range(rows - 1, 0, -1):
         min_seam[row] = min_index
         min_index = traces[row, min_index]
     
+    min_seam[0] = min_index
     print('FMS')
     return min_seam
 
@@ -79,16 +76,22 @@ def carve_min_seam(image, rows, cols, min_seam):
     return new_image
 
 def main():
-    image = imread('HJoceanSmall.jpg')
+    image = imread('HJoceanSmall.jpeg')
     rows, cols, _ = image.shape
     new_cols = 408
-
+    energies = calculate_energies(image, rows, cols)
+    min_seam = find_min_seam(energies)
+    pd_energies = pd.DataFrame(energies)
+    pd_energies.to_csv("energy.csv")
+    pd_seam = pd.DataFrame(min_seam)
+    pd_seam.to_csv("seam1.csv")
     for i in range(cols - new_cols):
         energies = calculate_energies(image, rows, cols)
         min_seam = find_min_seam(energies)
         image = carve_min_seam(image, rows, cols, min_seam)
         rows, cols, _ = image.shape
-
+    
+    
     imwrite('New_HJoceanSmall.jpg', image)
 
 if __name__ == '__main__':
